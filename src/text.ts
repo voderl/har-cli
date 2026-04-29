@@ -168,6 +168,35 @@ function formatBytes(n: number): string {
   return `${mb.toFixed(1)}Mb`;
 }
 
+/**
+ * Build a diagnostic message for the common case where `response.content.text`
+ * is missing in the HAR. The most frequent root cause (in our experience) is
+ * Chrome DevTools failing to buffer the response body for any request that
+ * was already in flight when HAR recording started — header metadata
+ * (size/mime/encoding) is captured but the body stream is gone. Status code
+ * and method don't matter; what matters is the relative timing between the
+ * request and DevTools opening / "Preserve log" turning on.
+ *
+ * We surface what we *do* know (size, mime, encoding) so the user can tell
+ * whether the body would have been useful, and point to the fix.
+ */
+function renderMissingBodyHint(d: ResponseDetailResponse): string {
+  const parts = ["(no body — response.content.text missing in HAR"];
+  const meta: string[] = [];
+  if (d.size_bytes && d.size_bytes > 0) meta.push(`size=${formatBytes(d.size_bytes)}`);
+  if (d.mime_type) meta.push(`mime=${d.mime_type}`);
+  if (d.encoding) meta.push(`encoding=${d.encoding}`);
+  if (meta.length > 0) parts.push(`; ${meta.join(", ")}`);
+  parts.push(")");
+  const head = parts.join("");
+  const advice =
+    "Likely cause: the request was already in flight when DevTools/HAR " +
+    "recording started, so Chrome captured headers but not the body. " +
+    "Re-record with DevTools Network → enable \"Preserve log\" and " +
+    "\"Disable cache\", then reload the page (or trigger the request again).";
+  return `${head}\n${advice}`;
+}
+
 function prettyIfJson(text: string, mime: string | null): string {
   if (!mime || !/json/i.test(mime)) return text;
   try {
@@ -194,7 +223,7 @@ export function renderResponse(
 
   if (d.text === null || d.text === undefined) {
     headerLines.push("");
-    headerLines.push("(no body)");
+    headerLines.push(renderMissingBodyHint(d));
     return headerLines.join("\n");
   }
 
