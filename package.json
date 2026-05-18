@@ -1,6 +1,6 @@
 {
   "name": "@voderl/har-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agent-friendly CLI for parsing, querying, and filtering HAR files.",
   "bin": {
     "har-cli": "dist/cli.js"
